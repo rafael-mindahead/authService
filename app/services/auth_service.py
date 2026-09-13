@@ -148,3 +148,24 @@ def refresh_tokens(
         new_access_token,
         new_refresh_token
     )
+
+
+def logout_user(
+    refresh_token: str
+) -> None:
+
+    token_hash = hash_refresh_token(
+        refresh_token
+    )
+
+    redis_key = f"refresh:{token_hash}"
+
+    deleted = redis_client.delete(
+        redis_key
+    )
+
+    if deleted == 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessao invalida ou ja encerrada"
+        )

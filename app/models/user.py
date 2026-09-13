@@ -4,7 +4,13 @@ from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.database import Base
+from enum import Enum as PyEnum
 
+from sqlalchemy import Boolean, DateTime, Enum, String
+class UserRole(str, PyEnum):
+    USER = "USER"
+    MANAGER = "MANAGER"
+    ADMIN = "ADMIN"
 
 class User(Base):
     __tablename__ = "users"
@@ -54,4 +60,9 @@ class User(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False
+    )
+    role: Mapped[UserRole] = mapped_column(
+    Enum(UserRole, name="user_role"),
+    default=UserRole.USER,
+    nullable=False
     )

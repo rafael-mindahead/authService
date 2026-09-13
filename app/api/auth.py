@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-from app.dependencies.auth import get_current_user
-from app.models.user import User
+from app.dependencies.auth import (
+    get_current_user,
+    require_role
+)
+from app.models.user import User, UserRole
 from app.schemas.user import RefreshTokenRequest
 from app.services.auth_service import refresh_tokens
 
@@ -14,7 +17,9 @@ from app.schemas.user import (
 )
 from app.services.auth_service import (
     register_user,
-    authenticate_user
+    authenticate_user,
+    logout_user,
+    refresh_tokens
     )
 
 
@@ -85,3 +90,30 @@ def refresh(
         refresh_token=refresh_token,
         token_type="bearer"
     )
+
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT
+)
+def logout(
+    token_data: RefreshTokenRequest
+):
+    logout_user(
+        token_data.refresh_token
+    )
+
+    return None
+
+@router.get("/admin")
+def admin_area(
+    current_user: User = Depends(
+        require_role(UserRole.ADMIN)
+    )
+):
+    return {
+        "message": "Bem-vindo a area administrativa",
+        "user": current_user.email,
+        "role": current_user.role
+    }

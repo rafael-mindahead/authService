@@ -1,4 +1,5 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from app.models.user import UserRole
 
 
 class UserCreate(BaseModel):
@@ -21,7 +22,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     is_active: bool
     is_verified: bool
-
+    role: UserRole
     model_config = ConfigDict(
         from_attributes=True
     )
