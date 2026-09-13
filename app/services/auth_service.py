@@ -2,11 +2,15 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
+from datetime import timedelta
+from app.core.config import settings
+from app.core.redis_client import redis_client
 from app.core.security import (
     hash_password,
     create_access_token,
-    verify_password
+    verify_password,
+    create_refresh_token,
+    hash_refresh_token
     )
 from app.models.user import User
 from app.schemas.user import UserCreate
@@ -77,9 +81,70 @@ def authenticate_user(
             status_code = status.HTTP_403_FORBIDDEN,
             detail = "Usuario inativo"
         )
-
     access_token = create_access_token(
-        subject = str(user.id)
+    subject=str(user.id)
     )
 
-    return access_token
+    refresh_token = create_refresh_token()
+
+    refresh_token_hash = hash_refresh_token(
+        refresh_token
+    )
+
+    redis_client.setex(
+        f"refresh:{refresh_token_hash}",
+        timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        ),
+    str(user.id)
+    )
+    return access_token, refresh_token
+
+
+def refresh_tokens(
+    refresh_token: str
+) -> tuple[str, str]:
+
+    token_hash = hash_refresh_token(
+        refresh_token
+    )
+
+    redis_key = f"refresh:{token_hash}"
+
+    user_id = redis_client.get(
+        redis_key
+    )
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token invalido ou expirado"
+        )
+
+    # Remove o token antigo
+    redis_client.delete(
+        redis_key
+    )
+
+    new_access_token = create_access_token(
+        subject=user_id
+    )
+
+    new_refresh_token = create_refresh_token()
+
+    new_refresh_hash = hash_refresh_token(
+        new_refresh_token
+    )
+
+    redis_client.setex(
+        f"refresh:{new_refresh_hash}",
+        timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        ),
+        user_id
+    )
+
+    return (
+        new_access_token,
+        new_refresh_token
+    )
