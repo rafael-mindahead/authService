@@ -54,16 +54,60 @@ def register_user(
     return user
 
 
+def get_login_attempts(email: str) -> int:
+    key = f"login_attempts:{email}"
+
+    attempts = redis_client.get(key)
+
+    if attempts is None:
+        return 0
+
+    return int(attempts)
+
+
+def register_failed_login(email: str) -> None:
+    key = f"login_attempts:{email}"
+
+    attempts = redis_client.incr(key)
+
+    if attempts == 1:
+        redis_client.expire(
+            key,
+            settings.LOGIN_BLOCK_SECONDS
+        )
+
+
+def clear_login_attempts(email: str) -> None:
+    redis_client.delete(
+        f"login_attempts:{email}"
+    )
+
+
 def authenticate_user(
         db: Session,
         login_data: UserLogin
 ) -> str:
     email = str(login_data.email).lower().strip()
 
+    attempts = get_login_attempts(email)
+
+    
+    if attempts >= settings.LOGIN_MAX_ATTEMPTS:
+        ttl = redis_client.ttl(
+            f"login_attempts:{email}"
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Muitas tentativas de login. Tente novamente em {ttl} segundos."
+        )
+
     user = db.scalar(
         select(User).where(User.email == email)
     )
     if not user:
+        register_failed_login(email)
+
         raise HTTPException(
             status_code = status.HTTP_401_UNAUTHORIZED,
             detail = "Credenciais invalidas"
@@ -72,6 +116,7 @@ def authenticate_user(
         login_data.password,
         user.password_hash
     ):
+        register_failed_login(email)
         raise HTTPException(
             status_code = status.HTTP_401_UNAUTHORIZED,
             detail = "Credenciais invalidas"
@@ -81,6 +126,9 @@ def authenticate_user(
             status_code = status.HTTP_403_FORBIDDEN,
             detail = "Usuario inativo"
         )
+    
+    clear_login_attempts(email)
+
     access_token = create_access_token(
     subject=str(user.id)
     )
