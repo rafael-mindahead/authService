@@ -1,3 +1,37 @@
+from sqlalchemy import select
+
+from app.database.database import SessionLocal
+from app.models.user import User, UserRole
+
+def create_user_and_login(
+    client,
+    email="auth@email.com",
+    password="Senha123!"
+):
+    register_response = client.post(
+        "/auth/register",
+        json={
+            "name": "Auth User",
+            "email": email,
+            "password": password
+        }
+    )
+
+    assert register_response.status_code == 201
+
+    login_response = client.post(
+        "/auth/login",
+        json={
+            "email": email,
+            "password": password
+        }
+    )
+
+    assert login_response.status_code == 200
+
+    return login_response.json()
+
+
 def test_register_user(client):
     response = client.post(
         "/auth/register",
@@ -98,3 +132,108 @@ def test_login_wrong_password(client):
     assert response.json() == {
         "detail": "Credenciais invalidas"
     }
+
+def test_me_without_token(client):
+    response = client.get(
+        "/auth/me"
+    )
+
+    assert response.status_code == 401
+
+
+
+def test_me_with_valid_token(client):
+    tokens = create_user_and_login(
+        client,
+        email="me@email.com"
+    )
+
+    access_token = tokens["access_token"]
+
+    response = client.get(
+        "/auth/me",
+        headers={
+            "Authorization": f"Bearer {access_token}"
+        }
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["email"] == "me@email.com"
+    assert data["name"] == "Auth User"
+    assert data["is_active"] is True
+
+def test_user_cannot_access_admin(client):
+    tokens = create_user_and_login(
+        client,
+        email="normal@email.com"
+    )
+
+    response = client.get(
+        "/auth/admin",
+        headers={
+            "Authorization": (
+                f"Bearer {tokens['access_token']}"
+            )
+        }
+    )
+
+    assert response.status_code == 403
+
+    assert response.json() == {
+        "detail": "Permissao insuficiente"
+    }
+
+
+def test_admin_can_access_admin_route(client):
+    client.post(
+        "/auth/register",
+        json={
+            "name": "Admin User",
+            "email": "admin@email.com",
+            "password": "Senha123!"
+        }
+    )
+
+    with SessionLocal() as db:
+        user = db.scalar(
+            select(User).where(
+                User.email == "admin@email.com"
+            )
+        )
+
+        assert user is not None
+
+        user.role = UserRole.ADMIN
+
+        db.commit()
+
+    login_response = client.post(
+        "/auth/login",
+        json={
+            "email": "admin@email.com",
+            "password": "Senha123!"
+        }
+    )
+
+    assert login_response.status_code == 200
+
+    access_token = login_response.json()[
+        "access_token"
+    ]
+
+    response = client.get(
+        "/auth/admin",
+        headers={
+            "Authorization": f"Bearer {access_token}"
+        }
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["user"] == "admin@email.com"
+    assert data["role"] == "ADMIN"
