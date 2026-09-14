@@ -237,3 +237,130 @@ def test_admin_can_access_admin_route(client):
 
     assert data["user"] == "admin@email.com"
     assert data["role"] == "ADMIN"
+
+
+def test_refresh_token(client):
+    tokens = create_user_and_login(
+        client,
+        email="refresh@email.com"
+    )
+
+    old_refresh_token = tokens["refresh_token"]
+
+    response = client.post(
+        "/auth/refresh",
+        json={
+            "refresh_token": old_refresh_token
+        }
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert "access_token" in data
+    assert "refresh_token" in data
+    assert data["token_type"] == "bearer"
+
+    assert data["refresh_token"] != old_refresh_token
+
+def test_refresh_token_cannot_be_reused(client):
+    tokens = create_user_and_login(
+        client,
+        email="rotation@email.com"
+    )
+
+    old_refresh_token = tokens["refresh_token"]
+
+    first_response = client.post(
+        "/auth/refresh",
+        json={
+            "refresh_token": old_refresh_token
+        }
+    )
+
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        "/auth/refresh",
+        json={
+            "refresh_token": old_refresh_token
+        }
+    )
+
+    assert second_response.status_code == 401
+
+def test_logout(client):
+    tokens = create_user_and_login(
+        client,
+        email="logout@email.com"
+    )
+
+    refresh_token = tokens["refresh_token"]
+
+    response = client.post(
+        "/auth/logout",
+        json={
+            "refresh_token": refresh_token
+        }
+    )
+
+    assert response.status_code == 204
+
+
+def test_logout_revokes_refresh_token(client):
+    tokens = create_user_and_login(
+        client,
+        email="logout-revoke@email.com"
+    )
+
+    refresh_token = tokens["refresh_token"]
+
+    logout_response = client.post(
+        "/auth/logout",
+        json={
+            "refresh_token": refresh_token
+        }
+    )
+
+    assert logout_response.status_code == 204
+
+    refresh_response = client.post(
+        "/auth/refresh",
+        json={
+            "refresh_token": refresh_token
+        }
+    )
+
+    assert refresh_response.status_code == 401
+
+def test_brute_force_protection(client):
+    client.post(
+        "/auth/register",
+        json={
+            "name": "Blocked User",
+            "email": "blocked@email.com",
+            "password": "Senha123!"
+        }
+    )
+
+    for _ in range(5):
+        response = client.post(
+            "/auth/login",
+            json={
+                "email": "blocked@email.com",
+                "password": "SenhaErrada"
+            }
+        )
+
+        assert response.status_code == 401
+
+    blocked_response = client.post(
+        "/auth/login",
+        json={
+            "email": "blocked@email.com",
+            "password": "Senha123!"
+        }
+    )
+
+    assert blocked_response.status_code == 429
