@@ -10,6 +10,9 @@ from app.core.security import (
     create_access_token,
     verify_password,
     create_refresh_token,
+    create_password_reset_token,
+    hash_password_reset_token,
+    hash_password,
     hash_refresh_token
     )
 from app.models.user import User
@@ -217,3 +220,71 @@ def logout_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sessao invalida ou ja encerrada"
         )
+
+
+def request_password_reset(
+    db: Session,
+    email: str
+) -> str | None:
+
+    normalized_email = email.lower().strip()
+
+    user = db.scalar(
+        select(User).where(
+            User.email == normalized_email
+        )
+    )
+
+    if user is None:
+        return None
+
+    reset_token = create_password_reset_token()
+
+    token_hash = hash_password_reset_token(
+        reset_token
+    )
+
+    redis_client.setex(
+        f"password_reset:{token_hash}",
+        settings.PASSWORD_RESET_EXPIRE_MINUTES * 60,
+        str(user.id)
+    )
+
+    return reset_token
+
+def reset_password(
+    db: Session,
+    token: str,
+    new_password: str
+) -> None:
+
+    token_hash = hash_password_reset_token(token)
+
+    redis_key = f"password_reset:{token_hash}"
+
+    user_id = redis_client.get(redis_key)
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token invalido ou expirado"
+        )
+
+    user = db.get(
+        User,
+        int(user_id)
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token invalido ou expirado"
+        )
+
+    user.password_hash = hash_password(
+        new_password
+    )
+
+    db.commit()
+
+    redis_client.delete(redis_key)

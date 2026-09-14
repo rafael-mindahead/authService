@@ -2,6 +2,7 @@ from sqlalchemy import select
 
 from app.database.database import SessionLocal
 from app.models.user import User, UserRole
+from app.services.auth_service import request_password_reset
 
 def create_user_and_login(
     client,
@@ -364,3 +365,124 @@ def test_brute_force_protection(client):
     )
 
     assert blocked_response.status_code == 429
+
+
+
+def test_forgot_password_existing_user(client):
+    client.post(
+        "/auth/register",
+        json={
+            "name": "Reset User",
+            "email": "reset@email.com",
+            "password": "Senha123!"
+        }
+    )
+
+    response = client.post(
+        "/auth/forgot-password",
+        json={
+            "email": "reset@email.com"
+        }
+    )
+
+    assert response.status_code == 200
+
+    assert "message" in response.json()
+
+
+def test_forgot_password_unknown_email(client):
+    response = client.post(
+        "/auth/forgot-password",
+        json={
+            "email": "naoexiste@email.com"
+        }
+    )
+
+    assert response.status_code == 200
+
+    assert "message" in response.json()
+
+
+def test_reset_password(client):
+    client.post(
+        "/auth/register",
+        json={
+            "name": "Password User",
+            "email": "password@email.com",
+            "password": "Senha123!"
+        }
+    )
+
+    with SessionLocal() as db:
+        token = request_password_reset(
+            db,
+            "password@email.com"
+        )
+
+    assert token is not None
+
+    response = client.post(
+        "/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "NovaSenha123!"
+        }
+    )
+
+    assert response.status_code == 200
+
+    old_login = client.post(
+        "/auth/login",
+        json={
+            "email": "password@email.com",
+            "password": "Senha123!"
+        }
+    )
+
+    assert old_login.status_code == 401
+
+    new_login = client.post(
+        "/auth/login",
+        json={
+            "email": "password@email.com",
+            "password": "NovaSenha123!"
+        }
+    )
+
+    assert new_login.status_code == 200
+
+def test_reset_token_cannot_be_reused(client):
+    client.post(
+        "/auth/register",
+        json={
+            "name": "Token User",
+            "email": "token@email.com",
+            "password": "Senha123!"
+        }
+    )
+
+    with SessionLocal() as db:
+        token = request_password_reset(
+            db,
+            "token@email.com"
+        )
+
+    first_response = client.post(
+        "/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "NovaSenha123!"
+        }
+    )
+
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        "/auth/reset-password",
+        json={
+            "token": token,
+            "new_password": "OutraSenha123!"
+        }
+    )
+
+    assert second_response.status_code == 400

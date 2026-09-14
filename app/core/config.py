@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     LOGIN_MAX_ATTEMPTS: int = 5
     LOGIN_BLOCK_SECONDS: int = 900
 
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 15
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

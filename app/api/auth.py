@@ -13,14 +13,18 @@ from app.schemas.user import (
     UserCreate,
     UserResponse,
     UserLogin,
-    TokenResponse
+    TokenResponse,
+    ForgotPasswordRequest,
+    ResetPasswordRequest
 )
 from app.services.auth_service import (
     register_user,
     authenticate_user,
     logout_user,
-    refresh_tokens
-    )
+    refresh_tokens,
+    request_password_reset,
+    reset_password
+)
 
 
 router = APIRouter(
@@ -116,4 +120,41 @@ def admin_area(
         "message": "Bem-vindo a area administrativa",
         "user": current_user.email,
         "role": current_user.role
+    }
+
+@router.post("/forgot-password")
+def forgot_password(
+    data: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    reset_token = request_password_reset(
+        db,
+        str(data.email)
+    )
+
+    if reset_token:
+        print(
+            f"[DEV] Password reset token: {reset_token}"
+        )
+
+    return {
+        "message": (
+            "Se o email estiver cadastrado, "
+            "enviaremos instrucoes para redefinir a senha."
+        )
+    }
+
+@router.post("/reset-password")
+def reset_user_password(
+    data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    reset_password(
+        db=db,
+        token=data.token,
+        new_password=data.new_password
+    )
+
+    return {
+        "message": "Senha redefinida com sucesso"
     }
