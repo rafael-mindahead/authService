@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.dependencies.auth import (
@@ -132,7 +133,7 @@ def forgot_password(
         str(data.email)
     )
 
-    if reset_token:
+    if reset_token and os.getenv("AUTH_DEBUG_RESET_TOKENS") == "1":
         print(
             f"[DEV] Password reset token: {reset_token}"
         )

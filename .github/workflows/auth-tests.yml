@@ -1,0 +1,56 @@
+name: AuthService integration tests
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: auth_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: auth_service_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U auth_user -d auth_service_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+psycopg://auth_user:test_password@localhost:5432/auth_service_test
+      REDIS_URL: redis://localhost:6379/1
+      SECRET_KEY: temporary_ci_secret_use_for_tests_only_not_for_production
+      ALGORITHM: HS256
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dev dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Validate syntax
+        run: python -m compileall -q app tests
+      - name: Test against isolated services
+        run: python -m pytest tests/ -v
