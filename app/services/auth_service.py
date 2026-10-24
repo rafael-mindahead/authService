@@ -16,7 +16,7 @@ from app.core.security import (
     hash_refresh_token
     )
 from app.models.user import User
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate, UserLogin
 
 def register_user(
         db: Session,
