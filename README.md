@@ -386,3 +386,25 @@ LinkedIn: www.linkedin.com/in/rafael-alves-0a6990379
 📄 License
 
 This project is intended for learning, portfolio and academic development purposes.
+
+
+## FriendsMeeting integration (October 2026)
+
+The service now has a containerized API. To run it with its own PostgreSQL and Redis,
+copy `.env.example` to `.env`, replace the credentials and generate a strong `SECRET_KEY`
+(`openssl rand -hex 32`); then run `docker compose up -d --build`.
+The API listens on **http://localhost:8001**, the private container port is 8000.
+Database migrations run on API startup.
+
+The FriendsMeeting Docker API connects to `http://host.docker.internal:8001` on Docker Desktop.
+Users are owned by authService (integer identity); FriendsMeeting stores a separate profile
+(UUID, username, friend code) with an `auth_user_id` association.
+Use `GET /auth/me` with `Authorization: Bearer <token>` to validate identity.
+
+**Test safety:** the test fixture drops and recreates tables. Create a separate `.env.test`
+from `.env.test.example` and point it to an isolated PostgreSQL database whose name
+ends in `_test`, plus Redis database `/1`. The fixture refuses to run otherwise.
+Never point tests at the normal `auth_service` database.
+
+Do not expose the development service to the public internet without TLS, secret
+management, and appropriate deployment hardening.

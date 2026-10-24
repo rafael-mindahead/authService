@@ -1,7 +1,7 @@
 .venv/
 .env
+.env.test
 __pycache__/
 *.pyc
 .pytest_cache/
 .DS_Store
-.env.test
